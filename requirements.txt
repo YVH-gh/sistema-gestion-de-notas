@@ -1,6 +1,0 @@
-streamlit
-supabase
-pandas
-openai
-PyPDF2 
-plotly
