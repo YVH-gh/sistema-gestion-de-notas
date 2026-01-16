@@ -1,5 +1,5 @@
 import streamlit as st
-import dashboard, gestion_notas, ia_tools
+from modules import dashboard, gestion_notas, ia_tools
 
 st.set_page_config(page_title="Gestión de Expedientes", layout="wide")
 
