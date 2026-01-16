@@ -95,6 +95,7 @@ def show_create():
 def show_list():
     st.title("📂 Buscador de Expedientes")
     
+    # Traemos las notas
     response = supabase.table("notas").select("*").order("created_at", desc=True).execute()
     data = response.data
     
@@ -104,17 +105,25 @@ def show_list():
 
     df = pd.DataFrame(data)
     
-    # Columnas visibles actualizadas
-    # Verificamos si la columna existe (por si hay datos viejos)
+    # --- CORRECCIÓN DEL ERROR ---
+    # Convertimos explícitamente las columnas de texto a objetos "Fecha" reales.
+    # 'errors="coerce"' significa: "si hay un error o está vacío, ponlo como NaT (Not a Time) y no rompas la app".
+    
+    if "fecha_presentacion" in df.columns:
+        df["fecha_presentacion"] = pd.to_datetime(df["fecha_presentacion"], errors="coerce").dt.date
+        
+    if "fecha_recordatorio" in df.columns:
+        df["fecha_recordatorio"] = pd.to_datetime(df["fecha_recordatorio"], errors="coerce").dt.date
+
+    # Definimos qué columnas mostrar
     cols = ["numero_expediente", "asunto", "estado", "fecha_presentacion", "fecha_recordatorio", "archivo_url"]
-    # Filtramos solo las que existen en el dataframe para evitar errores
     cols_final = [c for c in cols if c in df.columns]
 
     st.data_editor(
         df[cols_final],
         column_config={
             "archivo_url": st.column_config.LinkColumn("Evidencia", display_text="Ver Foto"),
-            "fecha_presentacion": st.column_config.DateColumn("Presentada"),
+            "fecha_presentacion": st.column_config.DateColumn("Presentada", format="DD/MM/YYYY"),
             "fecha_recordatorio": st.column_config.DateColumn("Consultar el...", format="DD/MM/YYYY"),
         },
         hide_index=True,
@@ -124,16 +133,20 @@ def show_list():
     st.divider()
     st.subheader("🔍 Vista Detallada")
     for nota in data:
-        with st.expander(f"{nota['numero_expediente']} - {nota['asunto']}"):
+        with st.expander(f"{nota.get('numero_expediente', 'S/N')} - {nota.get('asunto', 'Sin Asunto')}"):
             c1, c2 = st.columns([3, 1])
             with c1:
                 st.write(f"**Estado:** {nota.get('estado', '-')}")
-                # Manejo seguro por si el campo 'fecha_recordatorio' está vacío en notas viejas
+                
+                # Mostramos fecha solo si existe
                 fecha_rec = nota.get('fecha_recordatorio')
                 if fecha_rec:
                     st.info(f"📅 **Consultar el:** {fecha_rec}")
                 else:
-                    st.warning("Sin fecha de recordatorio")
+                    st.warning("Sin fecha de recordatorio establecida")
+                    
             with c2:
                 if nota.get('archivo_url'):
                     st.image(nota['archivo_url'], width=150)
+                else:
+                    st.write("Sin foto")
