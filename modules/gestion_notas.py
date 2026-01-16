@@ -1,9 +1,9 @@
 import streamlit as st
 from db_connection import supabase
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 
-# --- PANTALLA 1: CARGA (Esta ya funciona) ---
+# --- PANTALLA 1: CARGA ---
 def show_create():
     st.title("📱 Carga de Nueva Nota")
     
@@ -41,8 +41,12 @@ def show_create():
         c1, c2 = st.columns(2)
         nro_expediente = c1.text_input("N° Expediente")
         organismo = c2.selectbox("Destino", ["Ministerio de Educación", "Municipalidad", "Rentas", "Privado"])
+        
         asunto = st.text_input("Asunto")
-        prioridad = st.select_slider("Prioridad", ["Baja", "Media", "Alta"], value="Media")
+        
+        # NUEVO: Fecha de Recordatorio (Por defecto en 7 días)
+        fecha_default = datetime.now().date() + timedelta(days=7)
+        fecha_recordatorio = st.date_input("¿Cuándo consultar estado?", value=fecha_default)
         
         st.write("📷 **Foto del Sello**")
         foto = st.camera_input("Tomar foto")
@@ -60,6 +64,7 @@ def show_create():
                     try:
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         nombre_archivo = f"{timestamp}_{nro_expediente}_{archivo_final.name}"
+                        # Usamos "registros" como definimos antes
                         supabase.storage.from_("registros").upload(nombre_archivo, archivo_final.getvalue(), {"content-type": archivo_final.type})
                         url_archivo = supabase.storage.from_("registros").get_public_url(nombre_archivo)
                     except Exception as e:
@@ -71,21 +76,25 @@ def show_create():
                     "organismo_id": 1, 
                     "asunto": asunto,
                     "tipo_tramite": tipo_nota_selec,
-                    "prioridad": prioridad,
+                    # "prioridad": prioridad,  <-- ELIMINADO
+                    "fecha_recordatorio": str(fecha_recordatorio), # <-- NUEVO
                     "estado": "Presentada",
                     "fecha_presentacion": datetime.now().strftime("%Y-%m-%d"),
                     "proyecto_id": id_proyecto,
                     "requisito_id": id_requisito,
                     "archivo_url": url_archivo
                 }
-                supabase.table("notas").insert(datos).execute()
-                st.success("✅ Nota guardada correctamente.")
+                
+                try:
+                    supabase.table("notas").insert(datos).execute()
+                    st.success(f"✅ Nota guardada. Te recordaremos consultar el {fecha_recordatorio}.")
+                except Exception as e:
+                     st.error(f"Error guardando: {e}")
 
-# --- PANTALLA 2: LISTADO (Esta es la nueva) ---
+# --- PANTALLA 2: LISTADO ACTUALIZADA ---
 def show_list():
     st.title("📂 Buscador de Expedientes")
     
-    # Traer todas las notas ordenadas por fecha (las más nuevas primero)
     response = supabase.table("notas").select("*").order("created_at", desc=True).execute()
     data = response.data
     
@@ -93,36 +102,38 @@ def show_list():
         st.info("No hay notas cargadas todavía.")
         return
 
-    # Convertir a DataFrame para mostrarlo lindo
     df = pd.DataFrame(data)
     
-    # Seleccionar solo columnas útiles para la tabla
-    columnas_visibles = ["numero_expediente", "asunto", "estado", "prioridad", "fecha_presentacion", "archivo_url"]
-    
-    # Configurar la tabla para que el link sea clicable
+    # Columnas visibles actualizadas
+    # Verificamos si la columna existe (por si hay datos viejos)
+    cols = ["numero_expediente", "asunto", "estado", "fecha_presentacion", "fecha_recordatorio", "archivo_url"]
+    # Filtramos solo las que existen en el dataframe para evitar errores
+    cols_final = [c for c in cols if c in df.columns]
+
     st.data_editor(
-        df[columnas_visibles],
+        df[cols_final],
         column_config={
             "archivo_url": st.column_config.LinkColumn("Evidencia", display_text="Ver Foto"),
-            "fecha_presentacion": st.column_config.DateColumn("Fecha"),
-            "prioridad": st.column_config.TextColumn("Prioridad"),
+            "fecha_presentacion": st.column_config.DateColumn("Presentada"),
+            "fecha_recordatorio": st.column_config.DateColumn("Consultar el...", format="DD/MM/YYYY"),
         },
         hide_index=True,
         use_container_width=True
     )
 
-    # Vista detallada (Tarjetas)
     st.divider()
     st.subheader("🔍 Vista Detallada")
     for nota in data:
         with st.expander(f"{nota['numero_expediente']} - {nota['asunto']}"):
             c1, c2 = st.columns([3, 1])
             with c1:
-                st.write(f"**Estado:** {nota['estado']}")
-                st.write(f"**Trámite:** {nota['tipo_tramite']}")
-                st.write(f"**Fecha:** {nota['fecha_presentacion']}")
-            with c2:
-                if nota['archivo_url']:
-                    st.image(nota['archivo_url'], width=150, caption="Sello")
+                st.write(f"**Estado:** {nota.get('estado', '-')}")
+                # Manejo seguro por si el campo 'fecha_recordatorio' está vacío en notas viejas
+                fecha_rec = nota.get('fecha_recordatorio')
+                if fecha_rec:
+                    st.info(f"📅 **Consultar el:** {fecha_rec}")
                 else:
-                    st.write("Sin foto")
+                    st.warning("Sin fecha de recordatorio")
+            with c2:
+                if nota.get('archivo_url'):
+                    st.image(nota['archivo_url'], width=150)
