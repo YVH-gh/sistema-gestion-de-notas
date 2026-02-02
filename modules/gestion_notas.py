@@ -35,13 +35,22 @@ def show_create():
         if tipo_nota_selec != "Otro / Genérico":
             id_requisito = opciones_req[tipo_nota_selec]
 
+    # [NUEVO] BUSCAR ORGANISMOS (DESTINOS) EN LA BASE DE DATOS
+    try:
+        orgs = supabase.table("organismos").select("id, nombre").execute()
+        opciones_orgs = {o['nombre']: o['id'] for o in orgs.data}
+    except Exception as e:
+        st.error("Error cargando organismos. Usando lista por defecto.")
+        opciones_orgs = {"Ministerio de Educación": 1} # Fallback
+
     # 3. FORMULARIO
     with st.form("formulario_nota", clear_on_submit=True):
         st.write("---")
         c1, c2 = st.columns(2)
         nro_expediente = c1.text_input("N° Expediente")
-        organismo = c2.selectbox("Destino", ["Ministerio de Educación", "Municipalidad", "Rentas", "Privado"])
-        
+        nombre_organismo = c2.selectbox("Destino", list(opciones_orgs.keys()))
+        id_organismo = opciones_orgs[nombre_organismo] # Guardamos el ID real
+                
         asunto = st.text_input("Asunto")
         
         # NUEVO: Fecha de Recordatorio (Por defecto en 7 días)
@@ -73,7 +82,7 @@ def show_create():
                 # Insertar en BD
                 datos = {
                     "numero_expediente": nro_expediente,
-                    "organismo_id": 1, 
+                    "organismo_id": id_organismo, 
                     "asunto": asunto,
                     "tipo_tramite": tipo_nota_selec,
                     # "prioridad": prioridad,  <-- ELIMINADO
