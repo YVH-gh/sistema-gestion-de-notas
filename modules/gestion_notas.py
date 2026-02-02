@@ -53,8 +53,8 @@ def show_create():
                 
         asunto = st.text_input("Asunto")
         
-        # NUEVO: Fecha de Recordatorio (Por defecto en 7 días)
-        fecha_default = datetime.now().date() + timedelta(days=7)
+        # NUEVO: Fecha de Recordatorio
+        fecha_default = datetime.now().date() + timedelta(days=5)
         fecha_recordatorio = st.date_input("¿Cuándo consultar estado?", value=fecha_default)
         
         st.write("📷 **Foto del Sello**")
